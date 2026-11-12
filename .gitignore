@@ -1,0 +1,11 @@
+# 로컬 환경변수 (예제는 .env.example)
+.env
+
+# 빌드 결과물
+/bin/
+/server
+
+# 에디터·OS
+.idea/
+.vscode/
+.DS_Store
