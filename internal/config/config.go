@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -18,6 +19,8 @@ type Config struct {
 	MongoDatabase string
 	// ReadinessTimeout은 /readyz가 DB 확인에 쓰는 최대 시간이다.
 	ReadinessTimeout time.Duration
+	// CookieSecure는 식별 쿠키에 Secure 속성을 붙일지 정한다. HTTPS 배포에서는 true로 설정한다.
+	CookieSecure bool
 }
 
 // Load는 환경변수에서 설정을 읽고 검증한다.
@@ -36,6 +39,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("READINESS_TIMEOUT must be a positive duration")
 	}
 	cfg.ReadinessTimeout = timeout
+
+	secure, err := strconv.ParseBool(getenv("COOKIE_SECURE", "false"))
+	if err != nil {
+		return Config{}, fmt.Errorf("COOKIE_SECURE must be true or false")
+	}
+	cfg.CookieSecure = secure
 
 	return cfg, nil
 }

@@ -11,8 +11,8 @@ TableCheck의 풀스택 SWE 과제인 **Remote Waitlist Manager**를 학습 목�
 **최소 실행 환경 구성 단계**입니다.
 
 - 구현된 것: Go HTTP 서버, MongoDB 단일 노드 replica set, Docker Compose 구성,
-  상태 확인 경로(`/healthz`, `/readyz`)
-- 아직 구현하지 않은 것: 대기 등록, 체크인, 식사 종료 작업, 쿠키, 화면
+  상태 확인 경로(`/healthz`, `/readyz`), **대기 등록 API(`POST /api/parties`)와 식별 쿠키·CSRF 대응**
+- 아직 구현하지 않은 것: 화면, 상태 조회 API, 체크인, 식사 종료 작업
 - `docs/`의 문서는 구현 전에 확정한 정책과 설계 초안을 담고 있습니다.
 
 ## 기술 구성 (계획)
@@ -57,6 +57,8 @@ Go와 MongoDB는 컨테이너 안에서 실행하므로 호스트에 Go를 설�
 기본값으로 실행할 수 있습니다. 값을 바꾸려면 [.env.example](.env.example)을 `.env`로 복사해 수정합니다.
 `.env`는 Git에서 제외됩니다.
 
+- `COOKIE_SECURE`: 식별 쿠키의 `Secure` 속성. 로컬 HTTP에서는 기본값 `false`, **HTTPS로 배포할 때는 `true`**
+
 ### 실행
 
 ```sh
@@ -79,12 +81,26 @@ curl -i http://127.0.0.1:8080/readyz    # 200 {"status":"ready"}     DB 연결 +
 # 포맷, vet, 단위 테스트
 docker compose --profile tools run --rm go sh -c 'gofmt -l . && go vet ./... && go test ./...'
 
-# 실제 MongoDB 트랜잭션 commit·rollback 통합 테스트 (임시 DB를 만들고 테스트 후 삭제)
-docker compose --profile tools run --rm go go test -tags integration ./internal/database/...
+# 실제 MongoDB 통합 테스트: 트랜잭션 commit·rollback, 등록 API (테스트마다 임시 DB를 만들고 테스트 후 삭제)
+docker compose --profile tools run --rm go go test -tags integration ./...
 
 # staticcheck
 docker compose --profile tools run --rm go go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 ```
+
+검증 결과는 [docs/verification.md](docs/verification.md)의 "등록 API 검증 기록"에 있습니다.
+
+### 대기 등록 API 예시
+
+```sh
+curl -i -X POST http://127.0.0.1:8080/api/parties \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Kim","email":"kim@example.com","partySize":2}'
+```
+
+- 새 등록이면 201과 `waitlist_token` 쿠키를 받습니다. 같은 쿠키로 다시 보내면 200(기존 등록)입니다.
+- 이 요청은 영구 DB(`waitlist`)에 실제 팀을 만듭니다. 현재는 팀을 완료 처리하는 기능이 없으므로 같은 이메일로 다시 등록하면 409입니다.
+- 상세 규칙(입력 검증, 응답 코드, 쿠키, CSRF)은 [docs/design.md](docs/design.md) 2.7~2.9를 참고하세요.
 
 ### 종료
 
