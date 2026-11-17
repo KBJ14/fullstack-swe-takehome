@@ -23,6 +23,10 @@ type fakeRegistrar struct {
 	calls []party.RegisterCommand
 	res   party.RegisterResult
 	err   error
+
+	statusCalls []string
+	status      party.StatusView
+	statusErr   error
 }
 
 func (f *fakeRegistrar) Register(_ context.Context, cmd party.RegisterCommand) (party.RegisterResult, error) {
@@ -30,6 +34,13 @@ func (f *fakeRegistrar) Register(_ context.Context, cmd party.RegisterCommand) (
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, cmd)
 	return f.res, f.err
+}
+
+func (f *fakeRegistrar) Status(_ context.Context, tokenHash string) (party.StatusView, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.statusCalls = append(f.statusCalls, tokenHash)
+	return f.status, f.statusErr
 }
 
 func created() party.RegisterResult {

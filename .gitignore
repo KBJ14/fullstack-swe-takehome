@@ -1,6 +1,9 @@
 # 로컬 환경변수 (예제는 .env.example)
 .env
 
+# curl 예시가 만드는 쿠키 파일 (식별 토큰 원문 포함)
+cookies.txt
+
 # 빌드 결과물
 /bin/
 /server

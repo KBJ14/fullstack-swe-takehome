@@ -11,8 +11,9 @@ TableCheck의 풀스택 SWE 과제인 **Remote Waitlist Manager**를 학습 목�
 **최소 실행 환경 구성 단계**입니다.
 
 - 구현된 것: Go HTTP 서버, MongoDB 단일 노드 replica set, Docker Compose 구성,
-  상태 확인 경로(`/healthz`, `/readyz`), **대기 등록 API(`POST /api/parties`)와 식별 쿠키·CSRF 대응**
-- 아직 구현하지 않은 것: 화면, 상태 조회 API, 체크인, 식사 종료 작업
+  상태 확인 경로(`/healthz`, `/readyz`), **대기 등록 API(`POST /api/parties`)와 식별 쿠키·CSRF 대응**,
+  **상태 조회 API(`GET /api/me`)**
+- 아직 구현하지 않은 것: 화면, 폴링, 체크인, 식사 종료 작업
 - `docs/`의 문서는 구현 전에 확정한 정책과 설계 초안을 담고 있습니다.
 
 ## 기술 구성 (계획)
@@ -101,6 +102,19 @@ curl -i -X POST http://127.0.0.1:8080/api/parties \
 - 새 등록이면 201과 `waitlist_token` 쿠키를 받습니다. 같은 쿠키로 다시 보내면 200(기존 등록)입니다.
 - 이 요청은 영구 DB(`waitlist`)에 실제 팀을 만듭니다. 현재는 팀을 완료 처리하는 기능이 없으므로 같은 이메일로 다시 등록하면 409입니다.
 - 상세 규칙(입력 검증, 응답 코드, 쿠키, CSRF)은 [docs/design.md](docs/design.md) 2.7~2.9를 참고하세요.
+
+### 상태 조회 API 예시
+
+```sh
+# 등록 응답의 쿠키를 파일에 저장했다가 조회에 사용
+curl -s -c cookies.txt -X POST http://127.0.0.1:8080/api/parties \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Kim","email":"kim@example.com","partySize":2}'
+curl -s -b cookies.txt http://127.0.0.1:8080/api/me
+```
+
+- 쿠키가 없거나 연결된 팀이 없으면 401입니다. 응답 형식은 [docs/design.md](docs/design.md) 2.7 `GET /api/me`를 참고하세요.
+- `cookies.txt`에는 식별 토큰 원문이 들어 있으므로 공유하거나 커밋하지 마세요.
 
 ### 종료
 

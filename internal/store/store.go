@@ -36,8 +36,13 @@ const (
 	indexTokenHash   = "tokenHash_unique"
 	indexSequence    = "sequence_unique"
 
-	// DefaultTxTimeout은 트랜잭션 한 건(충돌 재시도 포함)에 허용하는 전체 시간이다.
+	indexWaitingSequence = "sequence_waiting"
+
+	// DefaultTxTimeout은 쓰기 트랜잭션 한 건(충돌 재시도 포함)에 허용하는 전체 시간이다.
 	DefaultTxTimeout = 5 * time.Second
+	// DefaultReadTimeout은 상태 조회 스냅샷 한 건에 허용하는 전체 시간이다.
+	// 화면이 자주 폴링할 조회이므로 쓰기보다 짧게 두어 DB가 느릴 때 요청이 쌓이지 않게 한다.
+	DefaultReadTimeout = 2 * time.Second
 )
 
 // partyDoc은 parties 컬렉션의 문서 구조다.
@@ -75,6 +80,7 @@ type Store struct {
 	parties     *mongo.Collection
 	restaurants *mongo.Collection
 	txTimeout   time.Duration
+	readTimeout time.Duration
 	now         func() time.Time
 }
 
@@ -86,6 +92,7 @@ func New(client *mongo.Client, db string) *Store {
 		parties:     d.Collection(partiesCollection),
 		restaurants: d.Collection(restaurantsCollection),
 		txTimeout:   DefaultTxTimeout,
+		readTimeout: DefaultReadTimeout,
 		now:         time.Now,
 	}
 }
@@ -118,6 +125,15 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			Keys:    bson.D{{Key: "sequence", Value: 1}},
 			Options: options.Index().SetName(indexSequence).SetUnique(true),
 		},
+		{
+			// 대기 중 팀만 담는 순번 인덱스. "내 앞의 대기 팀 수"를 셀 때
+			// 완료·식사 중 팀(시간이 지날수록 늘어남)을 훑지 않고 대기 팀만 범위 조회한다.
+			// 체크인 시 맨 앞 대기 팀을 찾을 때도 같은 인덱스를 쓸 수 있다.
+			Keys: bson.D{{Key: "sequence", Value: 1}},
+			Options: options.Index().
+				SetName(indexWaitingSequence).
+				SetPartialFilterExpression(bson.D{{Key: "status", Value: party.StatusWaiting}}),
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("create party indexes: %w", err)
@@ -139,14 +155,34 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 	return nil
 }
 
-// withTransaction은 fn을 하나의 트랜잭션으로 실행한다.
+// withTransaction은 fn을 쓰기 트랜잭션으로 실행한다.
+// (read concern snapshot, write concern majority, 제한 시간 txTimeout)
+func (s *Store) withTransaction(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error) {
+	txOpts := options.Transaction().
+		SetReadConcern(readconcern.Snapshot()).
+		SetWriteConcern(writeconcern.Majority())
+	return s.runTransaction(ctx, s.txTimeout, txOpts, fn)
+}
+
+// withReadSnapshot은 fn을 읽기 전용 트랜잭션으로 실행한다.
+//
+// read concern snapshot: fn 안의 모든 읽기가 같은 시점의 데이터를 본다.
+// 예를 들어 팀 상태, 앞 팀 수, 좌석 수가 서로 다른 시점에서 읽혀 모순되는 일이 없다.
+// fn은 쓰기를 하지 않아야 한다.
+func (s *Store) withReadSnapshot(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error) {
+	txOpts := options.Transaction().SetReadConcern(readconcern.Snapshot())
+	return s.runTransaction(ctx, s.readTimeout, txOpts, fn)
+}
+
+// runTransaction은 fn을 하나의 트랜잭션으로 실행한다.
 //
 //   - 충돌 등 일시적 오류(TransientTransactionError)는 드라이버가 fn 전체를 다시 실행한다.
 //     fn은 매 시도마다 필요한 상태와 조건을 DB에서 다시 읽어야 하며,
 //     HTTP 응답·쿠키 발급 같은 외부 부작용을 일으키면 안 된다.
-//   - 재시도를 포함한 전체 시간은 txTimeout으로 제한한다.
-func (s *Store) withTransaction(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error) {
-	ctx, cancel := context.WithTimeout(ctx, s.txTimeout)
+//   - 재시도를 포함한 전체 시간은 timeout으로 제한한다.
+func (s *Store) runTransaction(ctx context.Context, timeout time.Duration, txOpts *options.TransactionOptionsBuilder,
+	fn func(ctx context.Context) (any, error)) (any, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	sess, err := s.client.StartSession()
@@ -154,10 +190,6 @@ func (s *Store) withTransaction(ctx context.Context, fn func(ctx context.Context
 		return nil, fmt.Errorf("start session: %w", err)
 	}
 	defer sess.EndSession(context.WithoutCancel(ctx))
-
-	txOpts := options.Transaction().
-		SetReadConcern(readconcern.Snapshot()).
-		SetWriteConcern(writeconcern.Majority())
 
 	return sess.WithTransaction(ctx, func(ctx context.Context) (any, error) {
 		// 제한 시간이 지났으면 더 시도하지 않는다.

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +103,53 @@ func TestEnsureSchemaIsIdempotentAndKeepsState(t *testing.T) {
 	}
 	if _, ok := found[indexActiveEmail]["partialFilterExpression"]; !ok {
 		t.Fatal("active email index must be partial")
+	}
+	if i, ok := found[indexWaitingSequence]; !ok || i["partialFilterExpression"] == nil {
+		t.Fatalf("waiting sequence index missing or not partial: %v", i)
+	}
+}
+
+// 앞 팀 수 조회가 대기 중 팀 부분 인덱스를 사용하는지 실행 계획으로 확인한다.
+func TestAheadCountQueryUsesWaitingIndex(t *testing.T) {
+	ctx, s := newTestStore(t)
+	if err := s.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var plan bson.Raw
+	err := s.parties.Database().RunCommand(ctx, bson.D{
+		{Key: "explain", Value: bson.D{
+			{Key: "aggregate", Value: partiesCollection},
+			{Key: "pipeline", Value: bson.A{
+				bson.D{{Key: "$match", Value: bson.D{
+					{Key: "status", Value: party.StatusWaiting},
+					{Key: "sequence", Value: bson.D{{Key: "$lt", Value: int64(100)}}},
+				}}},
+				bson.D{{Key: "$count", Value: "n"}},
+			}},
+			{Key: "cursor", Value: bson.D{}},
+		}},
+		{Key: "verbosity", Value: "queryPlanner"},
+	}).Decode(&plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(plan.String(), indexWaitingSequence) {
+		t.Fatalf("ahead count query does not use %s: %s", indexWaitingSequence, plan.String())
+	}
+}
+
+func TestStatusReadTimeoutIsBounded(t *testing.T) {
+	ctx, s := newTestStore(t)
+	if err := s.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	s.readTimeout = time.Nanosecond
+	start := time.Now()
+	if _, err := s.Status(ctx, token.Hash("anything")); err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatal("status read did not respect timeout")
 	}
 }
 

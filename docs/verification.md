@@ -4,7 +4,8 @@
 
 > 실행하지 않은 테스트를 통과한 것으로 기록하지 않습니다.
 > 등록 API 범위의 시나리오(1~6, 15)는 **통합·단위 테스트로 실행**했고, 화면이 없으므로 **E2E는 미실행**입니다.
-> 나머지 시나리오는 미실행입니다. 실행 결과는 맨 아래 "등록 API 검증 기록"에 있습니다.
+> 시나리오 7은 상태 조회 부분만 실행했습니다. 나머지 시나리오는 미실행입니다.
+> 실행 결과는 맨 아래 "등록 API 검증 기록"과 "상태 조회 API 검증 기록"에 있습니다.
 
 ## 검증 방법 구분
 
@@ -73,7 +74,7 @@
 - **행동**: 두 팀의 상태 조회, 뒤 팀의 체크인 요청
 - **기대 결과**: 두 팀 모두 대기 중이며 체크인 가능이 아님. 뒤 팀의 체크인 요청은 거부되고 좌석 변화 없음. 앞 팀 수는 앞 팀 0, 뒤 팀 1
 - **검증 방법**: 단위 테스트(체크인 가능 판단), 통합 테스트(체크인 거부와 좌석 불변), E2E(두 브라우저 컨텍스트에서 체크인 버튼 미표시)
-- **실행 상태**: 미실행
+- **실행 상태**: 상태 조회 부분만 실행 — 단위 테스트(`CanCheckIn`)와 통합 테스트(`TestMeCanCheckInRules`: 두 팀 모두 체크인 불가, 앞 팀 수 0·1) 통과. 좌석은 fixture로 준비. 뒤 팀의 체크인 요청 거부는 체크인 API 미구현이라 미실행. E2E 미실행
 
 ## 8. 체크인 시 대기열 제외와 정확한 좌석 차감
 
@@ -217,3 +218,60 @@
 - Playwright E2E 전체 (화면 미구현)
 - Go race detector (`go test -race`): 도구 이미지가 `CGO_ENABLED=0`인 alpine이라 실행하지 않음
 - 실제 브라우저에서의 쿠키 저장·SameSite 동작 확인 (E2E 범위). 쿠키 저장소 테스트는 Go의 `net/http/cookiejar`로 흉내 낸 것이며 브라우저 동작 자체를 검증하지는 않음
+
+---
+
+## 상태 조회 API 검증 기록
+
+- **실행일**: 2026-11-17
+- **환경·데이터**: 등록 API 검증과 같음. 식사 중(`status`, `checkedInAt`, `serviceEndsAt`)·완료 상태와 사용 중 좌석은 DB fixture로 준비 (체크인·종료 기능은 구현하지 않음)
+- **회귀**: 쿠키 해석을 공통 함수로 바꾸면서 등록 코드가 바뀌었으므로, 등록 API·health·트랜잭션 테스트를 포함한 전체 단위·통합 테스트를 다시 실행해 모두 통과
+
+### 단위 테스트 — 통과
+
+| 테스트 | 확인 내용 |
+| --- | --- |
+| `TestCanCheckIn` (`internal/party`) | 맨 앞·좌석 충분 → 가능, 딱 맞는 좌석 → 가능, 맨 앞·좌석 부족 → 불가, 뒤 팀은 좌석이 충분하거나 인원이 작아도 불가, 만석 → 불가 |
+| `TestMeUnauthorizedWithoutValidCookie` | 쿠키 없음·형식 오류 → 401과 안내 문구, 저장소 조회 안 함 |
+| `TestMeUnknownTokenIs401` | 미등록 토큰 → 401, 저장소에는 해시만 전달 |
+| `TestMeInternalErrorHidesDetails` | 500 본문에 내부 상세 없음 |
+| `TestMeResponseShapeAndHeaders` | 상태별 포함·생략 필드, 최상위 필드는 `party`/`waiting`/`dining`뿐, `Cache-Control: no-store`, `Set-Cookie` 없음, 토큰·해시 없음 |
+| `TestMeOnlyGetIsRouted` | `POST /api/me` → 405 |
+
+### 통합 테스트 (실제 MongoDB) — 통과
+
+| 테스트 | 시나리오 |
+| --- | --- |
+| `TestMeWithIssuedCookie` | 등록 API가 발급한 실제 쿠키로 조회 200, 대기 중·앞 팀 0·체크인 가능, `no-store`, 쿠키 발급 없음, 이메일·토큰·해시·순번·`_id` 없음 |
+| `TestMeUnauthorized` | 쿠키 없음·형식 오류·미등록 토큰 → 401, 다른 팀 정보 없음 |
+| `TestMeAheadCountExcludesDiningAndCompleted` | 대기 4팀 중 1팀 식사 중·1팀 완료로 바꾸면 마지막 팀의 앞 팀 수가 3 → 1 |
+| `TestMeCanCheckInRules` | 빈 좌석 4석: 맨 앞 5명 불가, 뒤 2명 불가(앞 팀 1). 빈 좌석 5석: 맨 앞 가능, 뒤 팀은 여전히 불가 |
+| `TestMeDiningReturnsServiceEnd` | 식사 중 → 저장된 `serviceEndsAt` 그대로, `serverTime`은 요청 시각 근처, `waiting` 생략 |
+| `TestMeCompletedReturns200` | 완료 → 200, `party`만 포함 |
+| `TestMeFollowsSuccessorConsistentlyWithRegister` | 재등록 201의 쿠키를 버리고 이전 완료 쿠키만 남긴 상황: successor 대기 중·식사 중이면 조회는 successor 표시, 등록은 200; successor 완료 시 조회는 successor 완료(200), 등록은 새 팀 201; 새 팀은 새 쿠키로만 조회 |
+| `TestBrokenSuccessorReferenceIsAnErrorNotUnregistered` | 끊어진 `successorId` → 조회 500·등록 500, 상세 없음, 새 팀·쿠키 없음, 데이터 변경 없음 |
+| `TestMeDoesNotModifyAnything` | 대기·식사 중(종료 시각 지남)·완료 팀을 반복 조회해도 parties·restaurants 문서가 바이트 단위로 같음, 쿠키 발급 없음, 쿠키 계속 유효, 종료 시각이 지난 팀도 식사 중 유지 |
+| `TestAheadCountQueryUsesWaitingIndex` (`internal/store`) | 앞 팀 수 조회의 실행 계획이 `sequence_waiting` 인덱스를 사용 |
+| `TestStatusReadTimeoutIsBounded` (`internal/store`) | 조회 제한 시간을 넘기면 실패하고 2초 안에 반환 |
+| `TestEnsureSchemaIsIdempotentAndKeepsState` (변경) | `sequence_waiting` 부분 인덱스 생성 확인 추가 |
+
+- 새 테스트는 `-count=10`으로 반복 실행해 모두 통과
+- `go test -v` 기준 `internal/api`, `internal/store`에서 PASS 45건, FAIL·SKIP 없음
+- 실행 후 남은 임시 DB 없음
+
+### 정적 검사 — 통과
+
+- `gofmt -l` 출력 없음, `go vet`(일반·integration), `staticcheck v0.8.2`(일반·integration)
+
+### 실행 중인 컨테이너에서 확인 — 통과
+
+- 앱 재빌드 후 `/healthz` 200, `/readyz` 200
+- `GET /api/me` 쿠키 없음 → 401, `Cache-Control: no-store`; 미등록 토큰 쿠키 → 401
+- `POST /api/parties` cross-site → 403 (기존 CSRF 유지)
+- 영구 DB(`waitlist`)에 `sequence_waiting` 인덱스가 추가됨, 팀 문서 0건 (실제 등록 요청은 보내지 않음)
+
+### 미실행
+
+- Playwright E2E, 화면 폴링 (미구현)
+- 체크인 API가 `canCheckIn`과 무관하게 순서·좌석을 재검증하는지 (체크인 API 미구현)
+- Go race detector (도구 이미지가 `CGO_ENABLED=0`)

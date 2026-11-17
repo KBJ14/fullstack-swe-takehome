@@ -38,14 +38,23 @@ const (
 	msgUnsupportedMedia = "요청 형식은 application/json이어야 합니다."
 	msgForbidden        = "허용되지 않은 요청입니다."
 	msgEmailInUse       = "이 이메일로 진행 중인 등록이 있습니다. 등록했던 브라우저에서 확인해 주세요."
+	msgNotRegistered    = "등록 정보를 확인할 수 없습니다."
 	msgInternal         = "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
 )
 
+// Service는 API가 사용하는 저장소 기능이다.
+type Service interface {
+	party.Registrar
+	party.StatusReader
+}
+
 // New는 API 핸들러를 만든다.
-func New(reg party.Registrar, cfg Config, logger *slog.Logger) http.Handler {
+func New(svc Service, cfg Config, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
-	p := &partiesHandler{registrar: reg, cfg: cfg, logger: logger}
+	p := &partiesHandler{registrar: svc, cfg: cfg, logger: logger}
 	mux.HandleFunc("POST /api/parties", p.create)
+	m := &meHandler{reader: svc, logger: logger}
+	mux.HandleFunc("GET /api/me", m.get)
 
 	// CSRF 대응: Go 표준 라이브러리의 CrossOriginProtection.
 	//   - 브라우저가 보내는 Sec-Fetch-Site가 same-origin/none이 아니면 거부

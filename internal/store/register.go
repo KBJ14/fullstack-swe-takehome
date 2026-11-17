@@ -53,27 +53,24 @@ func (s *Store) registerOnce(ctx context.Context, cmd party.RegisterCommand) (pa
 	var predecessor *partyDoc
 
 	if cmd.PresentedTokenHash != "" {
-		cur, err := s.findOne(ctx, bson.D{{Key: "tokenHash", Value: cmd.PresentedTokenHash}})
+		// 조회 API와 같은 쿠키 해석 규칙을 쓴다. (resolve.go)
+		r, err := s.resolveToken(ctx, cmd.PresentedTokenHash)
 		if err != nil {
+			// 끊어진 successorId 참조도 여기서 오류가 된다. 미등록으로 숨기지 않는다.
 			return party.RegisterResult{}, err
 		}
 		switch {
-		case cur == nil:
-			// 잘못된 쿠키: 쿠키가 없는 요청과 같이 처리한다.
-		case cur.Status.Active():
-			return existing(cur), nil
-		case cur.SuccessorID != nil:
-			succ, err := s.findOne(ctx, bson.D{{Key: "_id", Value: *cur.SuccessorID}})
-			if err != nil {
-				return party.RegisterResult{}, err
-			}
-			if succ != nil && succ.Status.Active() {
-				return existing(succ), nil
-			}
-			// 재등록한 팀도 이미 완료됐다. 이 오래된 쿠키는 더 이상 권한을 주지 않으므로
-			// 쿠키가 없는 요청과 같이 처리한다. (docs/design.md 한계 참고)
+		case r.target == nil:
+			// 미등록 토큰: 쿠키가 없는 요청과 같이 처리한다.
+		case r.target.Status.Active():
+			// 쿠키 팀 또는 그 successor가 진행 중이다.
+			return existing(r.target), nil
+		case !r.viaSuccessor():
+			// 쿠키 팀이 완료됐고 아직 재등록하지 않았다.
+			predecessor = r.cookie
 		default:
-			predecessor = cur
+			// 재등록한 successor까지 완료됐다. 이 오래된 쿠키로는 다시 재등록 권한을 주지 않고
+			// 쿠키가 없는 요청과 같이 처리한다. (docs/design.md 2.9)
 		}
 	}
 
