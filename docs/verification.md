@@ -4,8 +4,8 @@
 
 > 실행하지 않은 테스트를 통과한 것으로 기록하지 않습니다.
 > 등록 API 범위의 시나리오(1~6, 15)는 **통합·단위 테스트로 실행**했고, 화면이 없으므로 **E2E는 미실행**입니다.
-> 시나리오 7은 상태 조회 부분만 실행했습니다. 나머지 시나리오는 미실행입니다.
-> 실행 결과는 맨 아래 "등록 API 검증 기록"과 "상태 조회 API 검증 기록"에 있습니다.
+> 체크인 범위의 시나리오(7~10, 16)는 통합·단위 테스트로 실행했습니다. 나머지 시나리오(11~14, 17)는 미실행입니다.
+> 실행 결과는 맨 아래 "등록 API 검증 기록", "상태 조회 API 검증 기록", "체크인 API 검증 기록"에 있습니다.
 
 ## 검증 방법 구분
 
@@ -74,7 +74,7 @@
 - **행동**: 두 팀의 상태 조회, 뒤 팀의 체크인 요청
 - **기대 결과**: 두 팀 모두 대기 중이며 체크인 가능이 아님. 뒤 팀의 체크인 요청은 거부되고 좌석 변화 없음. 앞 팀 수는 앞 팀 0, 뒤 팀 1
 - **검증 방법**: 단위 테스트(체크인 가능 판단), 통합 테스트(체크인 거부와 좌석 불변), E2E(두 브라우저 컨텍스트에서 체크인 버튼 미표시)
-- **실행 상태**: 상태 조회 부분만 실행 — 단위 테스트(`CanCheckIn`)와 통합 테스트(`TestMeCanCheckInRules`: 두 팀 모두 체크인 불가, 앞 팀 수 0·1) 통과. 좌석은 fixture로 준비. 뒤 팀의 체크인 요청 거부는 체크인 API 미구현이라 미실행. E2E 미실행
+- **실행 상태**: 단위·통합 테스트 통과 — 상태 조회(`TestMeCanCheckInRules`: 두 팀 모두 체크인 불가, 앞 팀 수 0·1)와 체크인(`TestCheckInBehindHeadIsRejectedEvenWithSeats`, `TestCheckInHeadWithoutEnoughSeatsLeavesNoPartialChanges`: 뒤 팀 `not_your_turn`, 앞 팀 `not_enough_seats`, 데이터 변경 없음). 좌석은 fixture로 준비. E2E 미실행
 
 ## 8. 체크인 시 대기열 제외와 정확한 좌석 차감
 
@@ -82,7 +82,7 @@
 - **행동**: A가 체크인
 - **기대 결과**: A는 식사 중, 사용 중 좌석 3, A의 종료 예정 시각 = 체크인 시각 + 9초. A는 대기열과 B의 앞 팀 수에서 제외되어 B의 앞 팀 수 0, B는 체크인 가능
 - **검증 방법**: 통합 테스트(상태·좌석·종료 시각), E2E(A 화면의 남은 시간 표시, B 화면 변화)
-- **실행 상태**: 미실행
+- **실행 상태**: 통합 테스트 통과(`TestCheckInSuccessWithIssuedCookie`: 4명 팀으로 실행 — 좌석 4, 종료 = 체크인 + 12초, 응답 시각 = 저장 시각, 이후 `GET /api/me`에서 B의 앞 팀 0·체크인 가능). E2E 미실행
 
 ## 9. 체크인 반복 요청의 중복 차감 방지
 
@@ -90,7 +90,7 @@
 - **행동**: (a) 체크인 요청을 여러 번 순차 전송 / (b) 같은 팀의 체크인 요청을 동시에 여러 번 전송
 - **기대 결과**: 사용 중 좌석은 2로 한 번만 증가. 첫 성공 이후 요청은 좌석을 바꾸지 않고 현재 상태(식사 중)를 반환. 종료 예정 시각도 바뀌지 않음
 - **검증 방법**: 통합 테스트
-- **실행 상태**: 미실행
+- **실행 상태**: 통합 테스트 통과 — (a) `TestCheckInRepeatedSequentiallyIsIdempotent`(3명), (b) `TestCheckInConcurrentSameParty`(4명, 동시 15건: `checked_in` 1건, 나머지 `already_dining`, 모든 응답의 종료 시각 동일). `-count=10` 반복 통과
 
 ## 10. 동시 체크인의 선착순·10석 제한
 
@@ -98,7 +98,7 @@
 - **행동**: 모든 팀의 체크인 요청을 동시에 전송. 이후 앞 팀이 입장한 상태에서도 남은 팀들의 체크인 요청을 동시에 전송
 - **기대 결과**: 각 시점에 맨 앞이면서 좌석이 충분한 팀만 체크인됨. 순서를 건너뛴 체크인 없음(예: 6명 팀 입장 후 5명 팀이 좌석 부족으로 대기하면 1명 팀도 대기). 사용 중 좌석은 어느 시점에도 0~10 범위를 벗어나지 않음
 - **검증 방법**: 통합 테스트(동시 요청 반복 실행, 트랜잭션 충돌 재시도 경로 포함)
-- **실행 상태**: 미실행
+- **실행 상태**: 통합 테스트 통과(`TestCheckInConcurrentDifferentPartiesKeepsOrderAndCapacity`: 6·5·1을 포함한 4가지 구성). 같은 라운드에서 뒤 팀의 409는 허용하고, 대기 팀이 진행이 멈출 때까지 다시 요청. 매 라운드 후 추월 없음·좌석 = 식사 중 인원 합 ≤ 10·200/409 외 응답 없음을 확인. `-count=10` 반복 통과
 
 ## 11. 같은 브라우저 종료 후 재접속
 
@@ -146,7 +146,7 @@
 - **행동**: 체크인 API 요청 (화면을 거치지 않는 직접 요청 포함)
 - **기대 결과**: 상태는 완료로 유지되고 좌석·종료 시각 변화 없음. 응답은 현재 상태(완료)를 나타냄
 - **검증 방법**: 통합 테스트
-- **실행 상태**: 미실행
+- **실행 상태**: 통합 테스트 통과(`TestCheckInCompletedIsRejected`: 409 `already_completed`, 데이터 변경 없음. 완료 상태는 fixture). 응답은 오류 본문이며 완료 상태는 `GET /api/me`로 확인
 
 ## 17. 서버 재시작 후 종료 처리 복구
 
@@ -273,5 +273,62 @@
 ### 미실행
 
 - Playwright E2E, 화면 폴링 (미구현)
-- 체크인 API가 `canCheckIn`과 무관하게 순서·좌석을 재검증하는지 (체크인 API 미구현)
+- 체크인 API가 `canCheckIn`과 무관하게 순서·좌석을 재검증하는지 → 아래 "체크인 API 검증 기록"에서 실행
+- Go race detector (도구 이미지가 `CGO_ENABLED=0`)
+
+---
+
+## 체크인 API 검증 기록
+
+- **실행일**: 2026-11-17
+- **환경·데이터**: 이전 기록과 같음. 식사 중·완료 상태와 사용 중 좌석은 DB fixture로 준비 (식사 종료 작업은 구현하지 않음)
+- **회귀**: 등록·상태 조회·health·트랜잭션 테스트를 포함한 전체 단위·통합 테스트를 다시 실행해 모두 통과
+
+### 단위 테스트 — 통과
+
+| 테스트 | 확인 내용 |
+| --- | --- |
+| `TestServiceDuration` (`internal/party`) | 1명 3초, 4명 12초, 10명 30초 |
+| `TestCheckInSuccessResponse` | `checked_in`·`already_dining` 모두 200, `party`+`dining`+`result` 형식, `waiting` 없음, `no-store`, `Set-Cookie` 없음, 토큰·해시 없음, 저장소에는 해시만 전달 |
+| `TestCheckInErrorMapping` | 미등록 401, `not_your_turn`·`not_enough_seats`·`already_completed` 409, 그 밖의 오류 500(상세 없음) |
+| `TestCheckInWithoutValidCookieIs401` | 쿠키 없음·형식 오류 → 401, 저장소 호출 없음 |
+| `TestCheckInRejectsBody` | `{}`, `{"partySize":1}`, `{"canCheckIn":true}`, 공백 → 400 `unexpected_body`, 저장소 호출 없음. 본문이 없으면 Content-Type과 관계없이 처리 |
+| `TestCheckInCSRF` | same-origin·같은 Origin·비브라우저 허용, cross-site·same-site·다른 Origin → 403 (저장소 호출 없음) |
+| `TestCheckInOnlyPostIsRouted` | `GET /api/me/check-in` → 405 |
+
+### 통합 테스트 (실제 MongoDB) — 통과
+
+| 테스트 | 시나리오 |
+| --- | --- |
+| `TestCheckInSuccessWithIssuedCookie` | 등록 API 쿠키로 체크인 200 `checked_in`, 저장: dining·체크인 시각(요청 시각 근처)·종료 = 체크인 + 4×3초, 응답 종료 시각 = 저장 값, 좌석 4, 이후 조회에서 A 식사 중·B 앞 팀 0·체크인 가능 |
+| `TestCheckInUnauthorized` | 쿠키 없음·형식 오류·미등록 토큰 → 401, 데이터 변경 없음 |
+| `TestCheckInBehindHeadIsRejectedEvenWithSeats` | 앞 팀(5명)이 있으면 1명 팀은 좌석이 충분해도 409 `not_your_turn`, 변경 없음 |
+| `TestCheckInHeadWithoutEnoughSeatsLeavesNoPartialChanges` | 빈 좌석 4석에서 맨 앞 5명 → 409 `not_enough_seats`. 팀 갱신 뒤 좌석 확보에서 실패하는 경로인데 parties·restaurants가 바이트 단위로 그대로(부분 변경 없음). 좌석이 생기면 같은 요청 성공, 좌석 10 |
+| `TestCheckInTenPartyInEmptyRestaurant` | 빈 식당에서 10명 팀 성공(좌석 10, 30초), 다음 팀은 맨 앞이지만 `not_enough_seats` |
+| `TestCheckInRepeatedSequentiallyIsIdempotent` | 반복 요청은 `already_dining`, 좌석·저장 시각 불변 |
+| `TestCheckInConcurrentSameParty` | 같은 팀 동시 15건 → `checked_in` 1건, 좌석 한 번만 차감, 모든 응답과 저장 값의 종료 시각 동일 |
+| `TestCheckInAlreadyDiningReturnsStoredTimes` | 종료 시각이 지난 식사 중 fixture → 200 `already_dining`, 저장 시각 그대로, 완료 처리 안 함, 데이터 변경 없음 |
+| `TestCheckInCompletedIsRejected` | 완료 → 409 `already_completed`, 재시작 없음 |
+| `TestCheckInFollowsSuccessorRule` | 재등록 201 쿠키를 잃은 상황: 이전 완료 쿠키로 체크인하면 successor가 체크인(좌석 3), 이전 팀은 완료 유지. successor까지 완료되면 409, 변경 없음 |
+| `TestCheckInBrokenSuccessorIsInternalError` | 끊어진 `successorId` → 500, 상세 없음, 변경 없음 |
+| `TestCheckInCSRFRejectedChangesNothing` | cross-site → 403, 변경 없음 |
+| `TestCheckInConcurrentDifferentPartiesKeepsOrderAndCapacity` | 구성 4가지(4·3·3·2·5·1 / 5·5·1 / 1×12 / 6·5·1)로 대기 팀 전체가 동시에 요청하는 라운드를 진행이 멈출 때까지 반복. 매 라운드 응답은 200·409뿐, 식사 중 팀은 항상 등록 순서의 앞부분, 좌석 = 식사 중 인원 합 ≤ 10. 최종 식사 중 팀 수는 각각 3·2·10·1이고, 남은 맨 앞 팀은 `not_enough_seats`, 그 뒤 팀은 `not_your_turn` |
+
+- 체크인 테스트 전체를 `-count=10`으로 반복 실행해 모두 통과
+- 실행 후 남은 임시 DB 없음
+
+### 정적 검사 — 통과
+
+- `gofmt -l` 출력 없음, `go vet`(일반·integration), `staticcheck v0.8.2`(일반·integration)
+
+### 실행 중인 컨테이너에서 확인 — 통과
+
+- 앱 재빌드 후 `/healthz` 200, `/readyz` 200, `GET /api/me`(쿠키 없음) 401
+- `POST /api/me/check-in`: 쿠키 없음 → 401 + `no-store`, 미등록 토큰 → 401, 본문 있음 → 400, cross-site → 403
+- 영구 DB(`waitlist`)는 팀 0건, `seatsInUse` 0 그대로 (실제 등록·체크인은 하지 않음)
+
+### 미실행
+
+- Playwright E2E, 화면의 체크인 버튼·폴링 (미구현)
+- 식사 종료 후 좌석 반환과 다음 팀 체크인 (식사 종료 작업 미구현, 시나리오 13·14)
 - Go race detector (도구 이미지가 `CGO_ENABLED=0`)

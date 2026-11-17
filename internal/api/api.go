@@ -46,6 +46,7 @@ const (
 type Service interface {
 	party.Registrar
 	party.StatusReader
+	party.CheckInner
 }
 
 // New는 API 핸들러를 만든다.
@@ -55,6 +56,8 @@ func New(svc Service, cfg Config, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/parties", p.create)
 	m := &meHandler{reader: svc, logger: logger}
 	mux.HandleFunc("GET /api/me", m.get)
+	c := &checkInHandler{checker: svc, logger: logger}
+	mux.HandleFunc("POST /api/me/check-in", c.post)
 
 	// CSRF 대응: Go 표준 라이브러리의 CrossOriginProtection.
 	//   - 브라우저가 보내는 Sec-Fetch-Site가 same-origin/none이 아니면 거부

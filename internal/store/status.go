@@ -67,13 +67,11 @@ func (s *Store) statusOnce(ctx context.Context, tokenHash string) (party.StatusV
 		}
 
 	case party.StatusDining:
-		if p.ServiceEndsAt == nil {
-			return party.StatusView{}, fmt.Errorf("%w: dining party %s has no serviceEndsAt", errIntegrity, p.ID.Hex())
+		info, err := s.diningInfo(p)
+		if err != nil {
+			return party.StatusView{}, err
 		}
-		view.Dining = &party.DiningInfo{
-			ServiceEndsAt: p.ServiceEndsAt.UTC(),
-			ServerTime:    s.now().UTC().Truncate(time.Millisecond),
-		}
+		view.Dining = info
 
 	case party.StatusCompleted:
 		// 완료 상태는 Party 정보만 돌려준다.
@@ -82,4 +80,16 @@ func (s *Store) statusOnce(ctx context.Context, tokenHash string) (party.StatusV
 		return party.StatusView{}, fmt.Errorf("%w: party %s has unknown status %q", errIntegrity, p.ID.Hex(), p.Status)
 	}
 	return view, nil
+}
+
+// diningInfo는 식사 중인 팀의 저장된 종료 예정 시각과 현재 서버 시각을 돌려준다.
+// 조회 API와 체크인 API가 같은 형식을 쓰도록 공유한다.
+func (s *Store) diningInfo(p *partyDoc) (*party.DiningInfo, error) {
+	if p.ServiceEndsAt == nil {
+		return nil, fmt.Errorf("%w: dining party %s has no serviceEndsAt", errIntegrity, p.ID.Hex())
+	}
+	return &party.DiningInfo{
+		ServiceEndsAt: p.ServiceEndsAt.UTC(),
+		ServerTime:    s.now().UTC().Truncate(time.Millisecond),
+	}, nil
 }

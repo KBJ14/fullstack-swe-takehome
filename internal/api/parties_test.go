@@ -27,6 +27,17 @@ type fakeRegistrar struct {
 	statusCalls []string
 	status      party.StatusView
 	statusErr   error
+
+	checkInCalls []string
+	checkIn      party.CheckInResult
+	checkInErr   error
+}
+
+func (f *fakeRegistrar) CheckIn(_ context.Context, tokenHash string) (party.CheckInResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.checkInCalls = append(f.checkInCalls, tokenHash)
+	return f.checkIn, f.checkInErr
 }
 
 func (f *fakeRegistrar) Register(_ context.Context, cmd party.RegisterCommand) (party.RegisterResult, error) {

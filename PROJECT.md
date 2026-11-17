@@ -12,8 +12,8 @@ TableCheck의 풀스택 SWE 과제인 **Remote Waitlist Manager**를 학습 목�
 
 - 구현된 것: Go HTTP 서버, MongoDB 단일 노드 replica set, Docker Compose 구성,
   상태 확인 경로(`/healthz`, `/readyz`), **대기 등록 API(`POST /api/parties`)와 식별 쿠키·CSRF 대응**,
-  **상태 조회 API(`GET /api/me`)**
-- 아직 구현하지 않은 것: 화면, 폴링, 체크인, 식사 종료 작업
+  **상태 조회 API(`GET /api/me`)**, **체크인 API(`POST /api/me/check-in`)**
+- 아직 구현하지 않은 것: 화면, 폴링, 식사 종료 작업
 - `docs/`의 문서는 구현 전에 확정한 정책과 설계 초안을 담고 있습니다.
 
 ## 기술 구성 (계획)
@@ -111,7 +111,12 @@ curl -s -c cookies.txt -X POST http://127.0.0.1:8080/api/parties \
   -H 'Content-Type: application/json' \
   -d '{"name":"Kim","email":"kim@example.com","partySize":2}'
 curl -s -b cookies.txt http://127.0.0.1:8080/api/me
+
+# 체크인 (본문 없음). 맨 앞이고 좌석이 충분할 때만 성공, 아니면 409
+curl -s -b cookies.txt -X POST http://127.0.0.1:8080/api/me/check-in
 ```
+
+- 현재는 식사 종료 작업이 없어서, 체크인한 팀의 좌석이 반환되지 않습니다. 영구 DB에서 여러 번 시험하면 좌석이 계속 사용 중으로 남습니다.
 
 - 쿠키가 없거나 연결된 팀이 없으면 401입니다. 응답 형식은 [docs/design.md](docs/design.md) 2.7 `GET /api/me`를 참고하세요.
 - `cookies.txt`에는 식별 토큰 원문이 들어 있으므로 공유하거나 커밋하지 마세요.
