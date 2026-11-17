@@ -1,7 +1,8 @@
 // Command server는 Remote Waitlist Manager HTTP 서버다.
 //
 // 제공하는 경로: 상태 확인(/healthz, /readyz), 대기 등록(POST /api/parties),
-// 상태 조회(GET /api/me), 체크인(POST /api/me/check-in).
+// 상태 조회(GET /api/me), 체크인(POST /api/me/check-in),
+// 손님용 화면(GET /, /join, /status, /static/...).
 // 서버 안에서 식사 종료·좌석 반환 작업(internal/worker)을 주기적으로 실행한다.
 package main
 
@@ -20,6 +21,7 @@ import (
 	"github.com/KBJ14/fullstack-swe-takehome/internal/database"
 	"github.com/KBJ14/fullstack-swe-takehome/internal/health"
 	"github.com/KBJ14/fullstack-swe-takehome/internal/store"
+	"github.com/KBJ14/fullstack-swe-takehome/internal/web"
 	"github.com/KBJ14/fullstack-swe-takehome/internal/worker"
 )
 
@@ -61,6 +63,8 @@ func run(logger *slog.Logger) error {
 		Logger:  logger,
 	}.Register(mux)
 	mux.Handle("/api/", api.New(st, api.Config{CookieSecure: cfg.CookieSecure}, logger))
+	// 손님용 화면(SSR + Islands). 초기 상태는 API와 같은 저장소 코드로 조회한다.
+	web.Handler{Reader: st, Logger: logger}.Register(mux)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

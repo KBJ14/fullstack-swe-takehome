@@ -8,16 +8,16 @@ TableCheck의 풀스택 SWE 과제인 **Remote Waitlist Manager**를 학습 목�
 
 ## 현재 상태
 
-**최소 실행 환경 구성 단계**입니다.
+손님이 브라우저로 등록부터 체크인·식사 완료·재등록까지 쓸 수 있는 상태입니다.
 
 - 구현된 것: Go HTTP 서버, MongoDB 단일 노드 replica set, Docker Compose 구성,
   상태 확인 경로(`/healthz`, `/readyz`), **대기 등록 API(`POST /api/parties`)와 식별 쿠키·CSRF 대응**,
   **상태 조회 API(`GET /api/me`)**, **체크인 API(`POST /api/me/check-in`)**,
-  **서버 내부 식사 종료·좌석 반환 작업**(1초 간격, 브라우저 요청과 무관)
-- 아직 구현하지 않은 것: 화면, 폴링
+  **서버 내부 식사 종료·좌석 반환 작업**(1초 간격, 브라우저 요청과 무관),
+  **손님용 화면**(Go SSR + 순수 JavaScript Islands, Playwright E2E)
 - `docs/`의 문서는 구현 전에 확정한 정책과 설계 초안을 담고 있습니다.
 
-## 기술 구성 (계획)
+## 기술 구성
 
 | 영역 | 선택 |
 | --- | --- |
@@ -29,9 +29,20 @@ TableCheck의 풀스택 SWE 과제인 **Remote Waitlist Manager**를 학습 목�
 
 ### 렌더링 방식
 
-- 서버가 HTML을 생성하는 **SSR 방식**입니다. **SPA로 만들지 않습니다.**
-- 클라이언트 JavaScript는 내 상태 화면의 자동 갱신(폴링)과 남은 시간 표시처럼
-  필요한 부분에만 사용합니다.
+- 서버가 실제 내용이 있는 HTML을 생성하는 **SSR 방식**이고, **SPA가 아닙니다.** (과제의 패턴 중 **Islands**)
+- JavaScript는 두 영역(Island)만 담당합니다: 등록 폼(`join.js`), 내 상태 카드(`status.js`). 페이지 이동은 일반 링크입니다.
+- 프런트엔드 라이브러리·빌드 도구는 없습니다. 템플릿·CSS·JS는 Go 바이너리에 포함(`embed`)되어 앱 서버가 함께 제공합니다.
+- 자세한 경계와 규칙: [docs/design.md](docs/design.md) 2.10
+
+### 화면 경로
+
+| 경로 | 화면 |
+| --- | --- |
+| `http://127.0.0.1:8080/` | 등록이 있으면 내 상태 화면, 없으면 등록 화면으로 이동 |
+| `/join` | 대기 등록 (진행 중인 등록이 있으면 내 상태 화면으로 이동) |
+| `/status` | 내 상태: 대기 중(내 앞 N팀) / 체크인 가능(체크인 버튼) / 식사 중(남은 시간) / 이용 완료(다시 등록) |
+
+자동 갱신·등록·체크인에는 JavaScript가 필요합니다. JavaScript가 꺼져 있으면 내용만 보이고 안내 문구가 표시됩니다.
 
 ## 로컬 실행
 
@@ -91,7 +102,21 @@ docker compose --profile tools run --rm go go test -tags integration ./...
 docker compose --profile tools run --rm go go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 ```
 
-검증 결과는 [docs/verification.md](docs/verification.md)의 "등록 API 검증 기록"에 있습니다.
+검증 결과는 [docs/verification.md](docs/verification.md)의 각 검증 기록에 있습니다.
+
+### E2E 테스트 (Playwright)
+
+```sh
+scripts/e2e.sh                       # 전체
+scripts/e2e.sh tests/flow.spec.js    # 일부 파일만
+```
+
+- 개발용 `app`·`waitlist` DB와 분리된 `app-e2e` 인스턴스를 임시 DB(`e2e_<시각>_<난수>`)로 띄우고,
+  공식 Playwright 이미지(`mcr.microsoft.com/playwright:v1.65.1-noble`, `@playwright/test 1.65.1` 고정)에서 실행합니다.
+  두 컨테이너 모두 호스트 포트를 공개하지 않으므로 실행 중인 개발 서비스와 충돌하지 않습니다.
+- 끝나면 `app-e2e` 컨테이너와 이번에 만든 임시 DB만 삭제합니다. (`mongo` 서비스는 실행 중이어야 함)
+- 테스트 도구(Node 패키지)는 `e2e/`에만 있고, 앱 화면은 의존성 없는 순수 JavaScript입니다.
+- 실패 시 스크린샷·trace는 `e2e/test-results/`, HTML 보고서는 `e2e/playwright-report/`에 남습니다. (Git 제외)
 
 ### 대기 등록 API 예시
 

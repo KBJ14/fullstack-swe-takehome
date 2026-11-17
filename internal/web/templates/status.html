@@ -1,0 +1,44 @@
+{{template "head" "내 대기 상태"}}
+<main class="card status" id="status-card" data-phase="{{.Phase}}" aria-label="내 대기 상태">
+  <p class="party-line" data-field="party"{{if not .PartyLine}} hidden{{end}}>{{.PartyLine}}</p>
+
+  <section data-section="waiting"{{if ne .Phase "waiting"}} hidden{{end}}>
+    <h1 class="headline" data-field="ahead">{{.Ahead}}</h1>
+    <p class="hint" data-field="hint">{{.Hint}}</p>
+  </section>
+
+  <section data-section="ready"{{if ne .Phase "ready"}} hidden{{end}}>
+    <h1 class="headline">입장 차례입니다</h1>
+    <p class="hint">매장 입구에서 아래 버튼을 눌러 체크인해 주세요.</p>
+    <button type="button" class="btn primary" id="check-in" disabled>체크인</button>
+  </section>
+
+  <section data-section="dining"{{if ne .Phase "dining"}} hidden{{end}}>
+    <h1 class="headline">식사 중입니다</h1>
+    <p class="countdown"><span class="countdown-label">남은 식사 시간</span>
+      <strong class="countdown-value" data-field="remaining">{{.Remaining}}</strong></p>
+  </section>
+
+  <section data-section="completed"{{if ne .Phase "completed"}} hidden{{end}}>
+    <h1 class="headline">이용이 완료되었습니다</h1>
+    <p class="hint">방문해 주셔서 감사합니다.</p>
+    <a class="btn primary" href="/join">다시 대기 등록하기</a>
+  </section>
+
+  <section data-section="unregistered"{{if ne .Phase "unregistered"}} hidden{{end}}>
+    <h1 class="headline">등록 정보를 확인할 수 없습니다</h1>
+    <p class="hint">이 브라우저에서 등록한 대기 정보를 찾지 못했습니다.</p>
+    <a class="btn primary" href="/join">대기 등록하기</a>
+  </section>
+
+  <p class="notice" id="notice" role="alert" hidden></p>
+  <p class="conn" id="conn" role="status" hidden></p>
+
+  <noscript>
+    <p class="noscript">자동 갱신과 체크인에는 JavaScript가 필요합니다. 브라우저 설정에서 JavaScript를 켜 주세요. 새로고침하면 최신 상태를 볼 수 있습니다.</p>
+  </noscript>
+</main>
+<p class="sr-only" id="announce" role="status" aria-live="polite"></p>
+<script type="application/json" id="initial-state">{{.State}}</script>
+<script src="/static/status.js" defer></script>
+{{template "foot"}}

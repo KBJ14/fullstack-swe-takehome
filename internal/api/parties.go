@@ -113,15 +113,18 @@ func (h *partiesHandler) newCookie(value string) *http.Cookie {
 	}
 }
 
-// presentedTokenHash는 요청 쿠키의 토큰 해시를 돌려준다.
+// TokenHashFromRequest는 요청 쿠키의 토큰 해시를 돌려준다.
 // 쿠키가 없거나 발급 형식이 아니면 빈 값을 돌려주어 쿠키가 없는 요청으로 처리한다.
-func presentedTokenHash(r *http.Request) string {
+// API와 화면(internal/web)이 같은 방식으로 쿠키를 해석하도록 공개한다.
+func TokenHashFromRequest(r *http.Request) string {
 	c, err := r.Cookie(CookieName)
 	if err != nil || !token.WellFormed(c.Value) {
 		return ""
 	}
 	return token.Hash(c.Value)
 }
+
+func presentedTokenHash(r *http.Request) string { return TokenHashFromRequest(r) }
 
 func isJSONContentType(v string) bool {
 	mt, _, err := mime.ParseMediaType(v)

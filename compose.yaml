@@ -77,6 +77,42 @@ services:
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
 
+  # ---- E2E 전용 (profile e2e, scripts/e2e.sh가 사용) ----
+  # 개발용 app과 분리된 앱 인스턴스. 임시 DB(E2E_DATABASE)를 쓰고 호스트에 포트를 공개하지 않는다.
+  app-e2e:
+    profiles: ["e2e"]
+    build: .
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      mongo:
+        condition: service_healthy
+    environment:
+      HTTP_ADDR: ":8080"
+      MONGODB_URI: mongodb://mongo:27017/?replicaSet=rs0
+      MONGODB_DATABASE: ${E2E_DATABASE:-e2e_default}
+      COOKIE_SECURE: "false"
+      SERVICE_END_INTERVAL: 1s
+
+  # Playwright 실행기. 공식 이미지(브라우저 포함)와 같은 버전의 @playwright/test를 e2e/package.json에 고정한다.
+  playwright:
+    profiles: ["e2e"]
+    image: mcr.microsoft.com/playwright:v1.65.1-noble
+    working_dir: /e2e
+    user: "${E2E_UID:-1000}:${E2E_GID:-1000}"
+    init: true
+    ipc: host
+    depends_on:
+      - app-e2e
+    environment:
+      HOME: /tmp
+      CI: "1"
+      BASE_URL: http://app-e2e:8080
+      MONGODB_URI: mongodb://mongo:27017/?replicaSet=rs0
+      E2E_DATABASE: ${E2E_DATABASE:-e2e_default}
+    volumes:
+      - ./e2e:/e2e
+
 volumes:
   mongo-data:
   mongo-config:

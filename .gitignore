@@ -4,6 +4,11 @@
 # curl 예시가 만드는 쿠키 파일 (식별 토큰 원문 포함)
 cookies.txt
 
+# E2E 도구 설치물과 실행 결과 (스크린샷·trace 포함)
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
+
 # 빌드 결과물
 /bin/
 /server

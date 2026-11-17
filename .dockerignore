@@ -2,4 +2,6 @@
 .env
 bin
 docs
+e2e
+scripts
 *.md

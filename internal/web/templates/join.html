@@ -1,0 +1,40 @@
+{{template "head" "대기 등록"}}
+<main class="card" id="join">
+  <h1 class="title">대기 등록</h1>
+  <p class="lead">이름과 인원수를 남겨 주세요. 입장 순서가 되면 이 화면에서 체크인할 수 있습니다.</p>
+
+  <form id="join-form" class="form" novalidate>
+    <div class="field">
+      <label for="name">이름</label>
+      <input id="name" name="name" type="text" autocomplete="name" maxlength="100" required
+             aria-describedby="name-error">
+      <p class="field-error" id="name-error" hidden></p>
+    </div>
+
+    <div class="field">
+      <label for="email">이메일</label>
+      <input id="email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required
+             aria-describedby="email-help email-error">
+      <p class="help" id="email-help">같은 이메일로는 한 번에 하나의 대기만 등록할 수 있습니다.</p>
+      <p class="field-error" id="email-error" hidden></p>
+    </div>
+
+    <div class="field">
+      <label for="partySize">인원수</label>
+      <input id="partySize" name="partySize" type="number" inputmode="numeric" min="1" max="10" step="1" required
+             aria-describedby="partySize-help partySize-error">
+      <p class="help" id="partySize-help">1명부터 10명까지 등록할 수 있습니다.</p>
+      <p class="field-error" id="partySize-error" hidden></p>
+    </div>
+
+    <p class="form-error" id="form-error" role="alert" hidden></p>
+
+    <button type="submit" class="btn primary" disabled>대기 등록하기</button>
+  </form>
+
+  <noscript>
+    <p class="noscript">대기 등록에는 JavaScript가 필요합니다. 브라우저 설정에서 JavaScript를 켠 뒤 다시 시도해 주세요.</p>
+  </noscript>
+</main>
+<script src="/static/join.js" defer></script>
+{{template "foot"}}
