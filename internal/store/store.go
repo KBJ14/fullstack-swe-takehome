@@ -37,6 +37,7 @@ const (
 	indexSequence    = "sequence_unique"
 
 	indexWaitingSequence = "sequence_waiting"
+	indexDiningEnds      = "serviceEndsAt_dining"
 
 	// DefaultTxTimeout은 쓰기 트랜잭션 한 건(충돌 재시도 포함)에 허용하는 전체 시간이다.
 	DefaultTxTimeout = 5 * time.Second
@@ -133,6 +134,14 @@ func (s *Store) EnsureSchema(ctx context.Context) error {
 			Options: options.Index().
 				SetName(indexWaitingSequence).
 				SetPartialFilterExpression(bson.D{{Key: "status", Value: party.StatusWaiting}}),
+		},
+		{
+			// 식사 중 팀만 담는 종료 시각 인덱스. 식사 종료 작업이 "종료 시각이 지난 식사 중 팀"을
+			// 종료 시각·_id 순으로 조금씩 읽는 데 쓴다. 완료 팀(계속 늘어남)은 포함하지 않는다.
+			Keys: bson.D{{Key: "serviceEndsAt", Value: 1}, {Key: "_id", Value: 1}},
+			Options: options.Index().
+				SetName(indexDiningEnds).
+				SetPartialFilterExpression(bson.D{{Key: "status", Value: party.StatusDining}}),
 		},
 	})
 	if err != nil {

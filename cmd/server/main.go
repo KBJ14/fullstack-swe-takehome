@@ -1,6 +1,8 @@
 // Command server는 Remote Waitlist Manager HTTP 서버다.
 //
-// 현재 제공하는 경로: 상태 확인(/healthz, /readyz), 대기 등록(POST /api/parties).
+// 제공하는 경로: 상태 확인(/healthz, /readyz), 대기 등록(POST /api/parties),
+// 상태 조회(GET /api/me), 체크인(POST /api/me/check-in).
+// 서버 안에서 식사 종료·좌석 반환 작업(internal/worker)을 주기적으로 실행한다.
 package main
 
 import (
@@ -18,6 +20,7 @@ import (
 	"github.com/KBJ14/fullstack-swe-takehome/internal/database"
 	"github.com/KBJ14/fullstack-swe-takehome/internal/health"
 	"github.com/KBJ14/fullstack-swe-takehome/internal/store"
+	"github.com/KBJ14/fullstack-swe-takehome/internal/worker"
 )
 
 func main() {
@@ -70,6 +73,22 @@ func run(logger *slog.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// 식사 종료·좌석 반환 작업. 브라우저 요청과 관계없이 서버 안에서 주기적으로 실행한다.
+	// 종료 순서: ctx 취소 → HTTP 서버 종료 → 작업 종료 대기 → (defer) DB 연결 닫기
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		(&worker.ServiceEnd{
+			Store:    st,
+			Logger:   logger,
+			Interval: cfg.ServiceEndInterval,
+		}).Run(ctx)
+	}()
+	defer func() {
+		stop()
+		<-workerDone
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {

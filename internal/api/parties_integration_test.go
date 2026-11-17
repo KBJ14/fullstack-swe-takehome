@@ -37,6 +37,7 @@ type env struct {
 	t   *testing.T
 	srv *httptest.Server
 	db  *mongo.Database
+	st  *store.Store
 }
 
 func newEnv(t *testing.T) *env {
@@ -70,7 +71,7 @@ func newEnv(t *testing.T) *env {
 
 	srv := httptest.NewServer(New(st, Config{}, slog.New(slog.NewTextHandler(io.Discard, nil))))
 	t.Cleanup(srv.Close)
-	return &env{t: t, srv: srv, db: db}
+	return &env{t: t, srv: srv, db: db, st: st}
 }
 
 type response struct {

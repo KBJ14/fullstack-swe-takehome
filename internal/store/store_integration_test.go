@@ -107,6 +107,9 @@ func TestEnsureSchemaIsIdempotentAndKeepsState(t *testing.T) {
 	if i, ok := found[indexWaitingSequence]; !ok || i["partialFilterExpression"] == nil {
 		t.Fatalf("waiting sequence index missing or not partial: %v", i)
 	}
+	if i, ok := found[indexDiningEnds]; !ok || i["partialFilterExpression"] == nil {
+		t.Fatalf("dining end index missing or not partial: %v", i)
+	}
 }
 
 // 앞 팀 수 조회가 대기 중 팀 부분 인덱스를 사용하는지 실행 계획으로 확인한다.

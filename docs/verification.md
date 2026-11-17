@@ -4,7 +4,8 @@
 
 > 실행하지 않은 테스트를 통과한 것으로 기록하지 않습니다.
 > 등록 API 범위의 시나리오(1~6, 15)는 **통합·단위 테스트로 실행**했고, 화면이 없으므로 **E2E는 미실행**입니다.
-> 체크인 범위의 시나리오(7~10, 16)는 통합·단위 테스트로 실행했습니다. 나머지 시나리오(11~14, 17)는 미실행입니다.
+> 체크인 범위의 시나리오(7~10, 16)와 식사 종료 범위의 시나리오(13, 14, 17)는 통합·단위 테스트로 실행했습니다.
+> 화면이 필요한 시나리오(11, 12)는 미실행입니다.
 > 실행 결과는 맨 아래 "등록 API 검증 기록", "상태 조회 API 검증 기록", "체크인 API 검증 기록"에 있습니다.
 
 ## 검증 방법 구분
@@ -122,7 +123,7 @@
 - **행동**: 해당 팀의 브라우저를 닫고 상태 조회 요청 없이 종료 예정 시각(6초) + 확인 주기 이상 대기
 - **기대 결과**: 팀은 완료 상태가 되고 사용 중 좌석 0으로 반환됨. 다음 대기 팀이 체크인 가능해짐
 - **검증 방법**: 통합 테스트(상태 조회 없이 DB 확인)
-- **실행 상태**: 미실행
+- **실행 상태**: 통합 테스트 통과 — `TestWorkerCompletesWithoutRequests`(실제 작업 주기 50ms, HTTP 요청 없이 4명 팀이 종료 시각 후 완료·좌석 0. 종료 시각은 fixture로 300ms 뒤로 설정해 6초 대기를 줄임), `TestAfterServiceEndStatusSeatsAndReRegistration`(종료 후 다음 팀 `canCheckIn` 참, 자동 체크인 없음)
 
 ## 14. 반복 종료 작업의 중복 반환 방지
 
@@ -130,7 +131,7 @@
 - **행동**: 종료 처리 작업을 여러 번 순차 실행하고, 동시에도 여러 번 실행
 - **기대 결과**: 종료 시각이 지난 팀만 한 번 완료 처리되어 사용 중 좌석 4. 반복 실행해도 좌석이 더 줄지 않고 0 미만이 되지 않음
 - **검증 방법**: 통합 테스트
-- **실행 상태**: 미실행
+- **실행 상태**: 통합 테스트 통과 — `TestCompleteDueOnlyTouchesDueDiningParties`(3명·4명 구성 그대로: 좌석 7 → 4), `TestCompleteDueRepeatedAndConcurrentReturnsSeatsOnce`(동시 12회 + 순차 3회: 완료 합계 2건, 좌석 정확), `TestCompleteDueUnderflowIsRolledBackAndDoesNotBlockOthers`(음수가 될 상황은 취소·보정 없음). `-count=10` 반복 통과
 
 ## 15. 이용 완료 후 같은 이메일로 재등록
 
@@ -154,7 +155,7 @@
 - **행동**: 종료 예정 시각이 지날 때까지 기다린 뒤 서버를 다시 시작
 - **기대 결과**: 재시작 후 첫 확인 주기 안에 DB에 저장된 종료 시각을 기준으로 완료 처리되고 좌석이 한 번만 반환됨
 - **검증 방법**: 통합 테스트(서버 또는 종료 작업을 중지·재시작하고 실제 MongoDB의 데이터 유지 확인)
-- **실행 상태**: 미실행
+- **실행 상태**: 통합 테스트 통과 — `TestWorkerCompletesOverdueOnStartup`(종료 시각이 1분 지난 팀이 있는 상태에서 작업을 새로 시작하면, 간격을 1시간으로 둬도 시작 직후 순회에서 완료. 아직 종료 전인 팀은 유지), `TestWorkerStopsOnCancel`(중지 후에는 처리하지 않음). 실제 서버 프로세스를 멈췄다 켜는 시험은 영구 DB에 데이터를 만들어야 해서 하지 않았고, 컨테이너 재시작으로는 작업 시작·정지 로그 순서만 확인
 
 ---
 
@@ -330,5 +331,65 @@
 ### 미실행
 
 - Playwright E2E, 화면의 체크인 버튼·폴링 (미구현)
-- 식사 종료 후 좌석 반환과 다음 팀 체크인 (식사 종료 작업 미구현, 시나리오 13·14)
+- 식사 종료 후 좌석 반환과 다음 팀 체크인 → 아래 "식사 종료 작업 검증 기록"에서 실행
+- Go race detector (도구 이미지가 `CGO_ENABLED=0`)
+
+---
+
+## 식사 종료 작업 검증 기록
+
+- **실행일**: 2026-11-17
+- **환경·데이터**: 이전 기록과 같음. 식사 중 상태·종료 시각·좌석은 DB fixture 또는 실제 체크인 API로 준비
+- **시간 제어**: 종료 경계는 `CompleteDue`에 넘기는 `now`로 제어해 실제로 기다리지 않음. 실제 주기 실행 테스트만 300ms~3초 안에서 대기
+- **회귀**: 등록·상태 조회·체크인·health·트랜잭션 테스트를 포함한 전체 단위·통합 테스트를 다시 실행해 모두 통과 (`go test -v` 최상위 PASS 99건, FAIL·SKIP 없음)
+
+### 단위 테스트 (`internal/worker`, 가짜 저장소) — 통과
+
+| 테스트 | 확인 내용 |
+| --- | --- |
+| `TestSweepsImmediatelyOnStart` | 간격이 1시간이어도 시작 직후 한 번 순회, 제어 가능한 시계(`Now`) 값 전달 |
+| `TestSweepsRepeatWithoutOverlap` | 순회(30ms)가 간격(5ms)보다 길어도 동시에 실행되는 순회는 최대 1개 |
+| `TestRetriesAfterTransientError` | 첫 순회 오류 → "will retry" 기록, 다음 순회에서 처리 |
+| `TestStopsOnContextCancelDuringSweep` | 진행 중인 순회가 ctx 취소로 멈추고 `Run`이 반환. 종료 취소를 재시도 오류로 기록하지 않음 |
+| `TestSweepTimeoutBoundsOneSweep` | 끝나지 않는 순회가 제한 시간으로 끊기고 다음 순회가 이어짐 |
+| `TestFailuresAreLoggedWithoutPersonalData` | 팀별 실패를 문서 ID와 원인으로 기록, 로그에 이메일·토큰 없음 |
+
+### 통합 테스트 (실제 MongoDB) — 통과
+
+| 테스트 | 시나리오 |
+| --- | --- |
+| `TestCompleteDueRespectsEndTimeBoundary` | 종료 1ms 전: 식사 중·좌석 유지. 종료 시각과 같으면: 완료, 좌석 정확히 반환 |
+| `TestCompleteDueOnlyTouchesDueDiningParties` | 종료된 팀만 완료(좌석 7 → 4). 아직 종료 전 팀과 대기 팀은 바이트 단위로 그대로. 완료 팀은 삭제되지 않고 `tokenHash`·`successorId`·시각·순번 그대로. 대기 팀 자동 체크인 없음 |
+| `TestCompleteDueRepeatedAndConcurrentReturnsSeatsOnce` | 동시 12회 + 순차 3회 실행 → 완료 합계 2건, 좌석 9 → 1 |
+| `TestCompleteDueUnderflowIsRolledBackAndDoesNotBlockOthers` | 좌석이 음수가 될 팀: 상태 변경까지 취소(바이트 단위로 그대로), 좌석 보정 없음, 실패로 보고. `batch=1`인데도 같은 순회에서 뒤의 정상 팀은 완료. 다음 순회에서도 같은 실패, 좌석 불변 |
+| `TestCompleteDueRecoversAfterError` | 식당 문서가 없어 실패 → 팀 변경 없음. 문서를 복구하면 다음 순회에서 완료 |
+| `TestCompleteDuePaginatesAllDueParties` | 같은 종료 시각을 포함한 7팀을 `batch=2`로 나눠 읽어 모두 완료 |
+| `TestCompleteDueStopsOnCancelledContext` | 취소된 ctx → 오류, 변경 없음 |
+| `TestDueQueryUsesDiningEndsIndex` | 종료 대상 조회의 실행 계획이 `serviceEndsAt_dining` 인덱스를 사용 |
+| `TestEnsureSchemaIsIdempotentAndKeepsState` (변경) | `serviceEndsAt_dining` 부분 인덱스 생성 확인 추가 |
+| `TestAfterServiceEndStatusSeatsAndReRegistration` | 실제 체크인 후 종료 1ms 전에는 변화 없음, 종료 시각에 완료·좌석 0. `GET /api/me` 완료 상태, 다음 팀 `canCheckIn` 거짓 → 참(자동 체크인 없음), 완료 팀 체크인 409, 같은 이메일 재등록 201 |
+| `TestConcurrentCheckInAndServiceEndKeepSeatsConsistent` | 10팀에 대해 체크인 4개 고루틴과 종료 순회 2개 고루틴을 동시에 반복. 관찰 중 좌석이 0~10을 벗어난 적 없음, 정지 후 좌석 = 식사 중 인원 합, 최종적으로 10팀 모두 완료·좌석 0 |
+| `TestWorkerCompletesOverdueOnStartup` | 시작 직후 순회로 이미 지난 팀 완료, 아직 종료 전 팀 유지 |
+| `TestWorkerCompletesWithoutRequests` | HTTP 요청 없이 실제 주기 실행만으로 종료 시각이 된 팀 완료, 좌석 0, 로그에 이메일 없음 |
+| `TestWorkerStopsOnCancel` | 정지 후에는 종료 대상이 생겨도 처리하지 않음 |
+
+- 식사 종료·동시성·작업 관련 테스트를 `-count=10`으로 반복 실행해 모두 통과
+- 실행 후 남은 임시 DB 없음
+
+### 정적 검사 — 통과
+
+- `gofmt -l` 출력 없음, `go vet`(일반·integration), `staticcheck v0.8.2`(일반·integration), `docker compose config -q`
+
+### 실행 중인 컨테이너에서 확인 — 통과
+
+- 앱 재빌드 후 로그 순서: `database schema ready` → `http server listening` → `service-end worker started`
+- `docker compose restart app`: `shutdown signal received` → `service-end worker stopped` → 다시 시작 (작업이 멈춘 뒤 프로세스 종료)
+- `/healthz` 200, `/readyz` 200(재시작 후 포함), `GET /api/me`·`POST /api/me/check-in` 쿠키 없음 → 401
+- 영구 DB(`waitlist`)에 `serviceEndsAt_dining` 인덱스 추가, 팀 0건, 좌석 0 (실제 등록·체크인은 하지 않음)
+
+### 미실행
+
+- Playwright E2E, 화면의 남은 시간 표시·폴링 (미구현)
+- 실제 서버 프로세스를 식사 중에 멈췄다가 종료 시각 뒤에 다시 켜는 시험 (영구 DB에 데이터를 만들지 않기 위해 생략. 같은 동작을 작업 단위 테스트로 확인)
+- 여러 서버 인스턴스 실행 (동시 순회 테스트로 같은 조건을 확인)
 - Go race detector (도구 이미지가 `CGO_ENABLED=0`)

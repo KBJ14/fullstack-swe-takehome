@@ -21,6 +21,8 @@ type Config struct {
 	ReadinessTimeout time.Duration
 	// CookieSecure는 식별 쿠키에 Secure 속성을 붙일지 정한다. HTTPS 배포에서는 true로 설정한다.
 	CookieSecure bool
+	// ServiceEndInterval은 식사 종료 작업의 확인 간격이다. (기본 1초)
+	ServiceEndInterval time.Duration
 }
 
 // Load는 환경변수에서 설정을 읽고 검증한다.
@@ -45,6 +47,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("COOKIE_SECURE must be true or false")
 	}
 	cfg.CookieSecure = secure
+
+	interval, err := time.ParseDuration(getenv("SERVICE_END_INTERVAL", "1s"))
+	if err != nil || interval <= 0 {
+		return Config{}, fmt.Errorf("SERVICE_END_INTERVAL must be a positive duration")
+	}
+	cfg.ServiceEndInterval = interval
 
 	return cfg, nil
 }
