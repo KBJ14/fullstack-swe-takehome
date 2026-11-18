@@ -1,3 +1,60 @@
+# Remote Waitlist Manager — implementation
+
+A virtual restaurant waitlist: diners join from their phone, watch their place in line, check in when a table is ready, and are released automatically when their meal time ends.
+
+- **Stack**: Go server with server-rendered HTML (Go templates) and two small vanilla JavaScript islands (no frontend dependencies, not an SPA), MongoDB (single-node replica set for transactions), Playwright end-to-end tests, Docker Compose.
+- **Rules implemented**: 10 seats, 3 seconds per person, strict first-come-first-served (a smaller party never jumps ahead of the party at the head of the line), one active registration per email, no overbooking under concurrent requests.
+- The original assignment text is kept unchanged below the line.
+
+## Run locally
+
+**Requirements**
+
+- Docker with the Compose plugin (verified with Docker 29.9.2 and Docker Compose v5.6.1)
+- Port `8080` free on `127.0.0.1` (or set `APP_PORT`, see below)
+- Internet access the first time, to pull the `golang`, `mongo` and distroless images
+
+No local Go, Node or MongoDB installation is needed.
+
+**Start**
+
+```sh
+git clone https://github.com/KBJ14/fullstack-swe-takehome.git
+cd fullstack-swe-takehome
+# if this work is not merged into main yet: git checkout feat/waitlist-manager
+docker compose up -d --build --wait
+```
+
+The command returns when MongoDB is initialized and the app is running.
+
+**Open**
+
+- Diner app: <http://127.0.0.1:8080/>
+- Readiness check: `curl http://127.0.0.1:8080/readyz` → `{"status":"ready"}`
+
+To try several parties at once, use different browsers or private windows: each browser keeps its own registration in a cookie.
+
+**Use a different port**
+
+```sh
+APP_PORT=8081 docker compose up -d --build --wait   # then open http://127.0.0.1:8081/
+```
+
+**Stop**
+
+```sh
+docker compose down      # stops and removes containers; the database volume is kept
+docker compose down -v   # also deletes the database volume (all registrations)
+```
+
+## More documentation (Korean)
+
+- [PROJECT.md](PROJECT.md) — services, configuration (`.env.example`), screen routes, API examples, and how to run the Go and Playwright tests (`scripts/e2e.sh`, `scripts/e2e-restart.sh`)
+- [docs/design.md](docs/design.md) — requirements, policy decisions and interpretations, data model, transactions, API contract, UI (SSR + islands)
+- [docs/verification.md](docs/verification.md) — test scenarios and recorded results, including what was verified only in Chromium and what remains unverified
+
+---
+
 # TableCheck SWE Fullstack Take-Home Assignment
 
 Remote Waitlist Manager is a full-stack application designed to handle the waitlist of your restaurant. It manages seating, queueing, and notifications for your diners. **Multiple parties** should be able to join your restaurant's waitlist **concurrently**. Instead of waiting in line to write your name on a piece of paper, you can now join the waitlist virtually and get notified when your table is ready. This will increase your restaurant's efficiency and provide a better experience for your customers.

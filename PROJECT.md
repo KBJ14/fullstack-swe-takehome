@@ -3,7 +3,8 @@
 TableCheck의 풀스택 SWE 과제인 **Remote Waitlist Manager**를 학습 목적으로 구현하기 위한 프로젝트입니다.
 
 - 과제 원문 저장소: <https://github.com/TableCheck-Labs/fullstack-swe-takehome>
-- 이 저장소의 [`README.md`](README.md)는 **과제 원문**이며, 수정하지 않고 그대로 둡니다.
+- [`README.md`](README.md) 상단에는 제출용 프로젝트 소개와 로컬 실행 안내(영문)가 있고, 그 아래에 **과제 원문이 수정 없이 그대로** 있습니다.
+  이 문서와 `docs/`는 상세 설정·설계·검증 기록입니다.
   프로젝트 자체에 대한 설명과 설계 문서는 이 파일과 `docs/` 아래에 따로 작성합니다.
 
 ## 현재 상태
@@ -109,6 +110,7 @@ docker compose --profile tools run --rm go go run honnef.co/go/tools/cmd/staticc
 ```sh
 scripts/e2e.sh                       # 전체
 scripts/e2e.sh tests/flow.spec.js    # 일부 파일만
+scripts/e2e-restart.sh               # 앱 프로세스 강제 종료·재시작 후 식사 종료·좌석 반환 복구 검증
 ```
 
 - 개발용 `app`·`waitlist` DB와 분리된 `app-e2e` 인스턴스를 임시 DB(`e2e_<시각>_<난수>`)로 띄우고,
